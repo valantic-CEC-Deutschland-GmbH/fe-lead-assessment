@@ -386,12 +386,14 @@
             <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Search\ResolvedCriteriaProductSearchRoute.inner"/>
             <argument type="service" id="event_dispatcher"/>
             <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Listing\Processor\CompositeListingProcessor" />
+            <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Listing\Processor\SortingListingProcessor" />
         </service>
 
         <service id="Shopware\Core\Content\Product\SalesChannel\Listing\ResolveCriteriaProductListingRoute" decorates="Shopware\Core\Content\Product\SalesChannel\Listing\ProductListingRoute" decoration-priority="-2000" public="true">
             <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Listing\ResolveCriteriaProductListingRoute.inner"/>
             <argument type="service" id="event_dispatcher"/>
             <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Listing\Processor\CompositeListingProcessor"/>
+            <argument type="service" id="Shopware\Core\Content\Product\SalesChannel\Listing\Processor\SortingListingProcessor" />
         </service>
 
         <service id="Shopware\Core\Content\Product\SalesChannel\FindVariant\FindProductVariantRoute" public="true">
