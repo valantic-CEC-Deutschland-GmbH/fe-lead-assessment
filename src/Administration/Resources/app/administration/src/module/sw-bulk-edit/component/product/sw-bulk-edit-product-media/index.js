@@ -108,6 +108,7 @@ export default {
 
             const newMedia = this.productMediaRepository.create(Shopware.Context.api);
             newMedia.mediaId = media.id;
+            newMedia.position = this.product.media.length + 1;
             newMedia.media = {
                 url: media.url,
                 id: media.id,
