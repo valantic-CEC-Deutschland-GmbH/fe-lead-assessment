@@ -5,6 +5,10 @@ import { glob } from 'tinyglobby';
 
 type BundleEntry = {
     basePath?: string;
+    technicalName?: string;
+    storefront?: {
+        entryFilePath?: string | null;
+    };
 };
 
 const COMPONENTS_PATH = 'Resources/views/components';
@@ -23,18 +27,33 @@ function fileToTag(relPath: string, namespace: string | undefined): string {
 }
 
 /**
- * Vite plugin that manages the component dev import map flag file.
+ * Vite plugin that manages the component dev flag file
+ * (`var/cache/storefront_components.dev.json`).
  *
- * When the Vite dev server starts it writes a **complete, valid import map**
- * to `var/cache/storefront_components.dev.json`.  PHP detects the file and
- * uses its contents directly as the `<script type="importmap">` payload —
- * no URL rewriting is needed on the PHP side because the map already points
- * every bare specifier (`shopware`, `Sw:Header:Navbar`, …) to the running
- * dev server.
+ * When the Vite dev server starts it writes a JSON object with:
  *
- * When the dev server stops the file is removed. The Storefront then
- * transparently falls back to the production import map that was compiled
- * by `theme:compile`.
+ *   imports  — a complete ES module import map that PHP injects as
+ *              `<script type="importmap">`. Every bare specifier
+ *              (`shopware`, `Sw:Header:Navbar`, …) points directly to the
+ *              running dev server, so no URL rewriting is needed in PHP.
+ *
+ *   styles   — an ordered array of Vite dev-server CSS URLs produced by the
+ *              sw-theme-scss plugin. PHP uses these for `<link>` tags
+ *              instead of the precompiled theme CSS. Present only when
+ *              var/theme-files.json exists.
+ *
+ *   scripts  — an ordered array of Vite dev-server JS entry URLs. PHP uses
+ *              these to replace the compiled theme JS bundle with live Vite
+ *              modules. The first entry is always the core storefront
+ *              main.js; any plugin bundles with a storefront entryFilePath
+ *              follow in plugins.json order. Present only when
+ *              var/plugins.json exists.
+ *
+ * A single flag file carries both concerns so PHP only needs to check for
+ * one file to know whether the Vite dev server is running.
+ *
+ * When the dev server stops the file is removed and the Storefront
+ * transparently falls back to the production import map and compiled CSS.
  */
 export function devImportMapPlugin(projectRoot: string): Plugin {
     const flagFile = path.join(projectRoot, 'var/cache/storefront_components.dev.json');
@@ -100,11 +119,39 @@ export function devImportMapPlugin(projectRoot: string): Plugin {
                     }
                 }
 
-                const devMap = { imports };
+                // Single CSS URL from the sw-theme-scss plugin middleware.
+                // All SCSS entries are compiled together as one virtual document,
+                // so a single URL is sufficient. Included here so PHP only needs
+                // to check one flag file.
+                const themeFilesPath = path.join(projectRoot, 'var/theme-files.json');
+                const styles = fs.existsSync(themeFilesPath)
+                    ? [`${origin}/theme-scss/all.css`]
+                    : [];
+
+                // JS bundle entry URLs — replaces the Webpack hot proxy in dev.
+                // Core storefront main.js lives inside the Vite root so it gets a
+                // clean URL; plugin entries are outside and use the /@fs/ prefix.
+                // Mirrors the webpack.config.js pluginEntries filter: only bundles
+                // with a storefront.entryFilePath are included, and technicalName
+                // 'storefront' is the core entry, not a plugin.
+                const scripts: string[] = [];
+                if (fs.existsSync(pluginsJsonPath)) {
+                    // Core storefront entry is always first.
+                    scripts.push(`${origin}/src/main.js`);
+
+                    for (const [, bundle] of Object.entries(bundles)) {
+                        const entryFilePath = bundle.storefront?.entryFilePath;
+                        if (!entryFilePath || bundle.technicalName === 'storefront') continue;
+                        const absEntry = path.join(projectRoot, bundle.basePath ?? '', entryFilePath);
+                        scripts.push(`${origin}/@fs${absEntry}`);
+                    }
+                }
+
+                const devMap = { imports, styles, scripts };
                 fs.mkdirSync(path.dirname(flagFile), { recursive: true });
                 fs.writeFileSync(flagFile, JSON.stringify(devMap, null, 2));
                 server.config.logger.info(
-                    `[sw-dev-import-map] dev import map written → ${flagFile}`,
+                    `[sw-dev-import-map] dev flag file written → ${flagFile}`,
                     { timestamp: true },
                 );
             };

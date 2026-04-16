@@ -28,8 +28,7 @@ const { createRequire } = require('node:module');
 const scriptDir = __dirname;
 const projectRoot = process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
-    // build/ → storefront/ → app/ → Resources/ → Storefront/ → src/ → project root
-    : path.resolve(scriptDir, '../../../../../..');
+    : path.resolve(scriptDir, '../../../../../../..');
 const pluginsJsonPath = path.join(projectRoot, 'var', 'plugins.json');
 const COMPONENTS_PATH = 'Resources/views/components';
 
@@ -198,6 +197,19 @@ function componentMapPlugin() {
         console.log(`  components : ${componentRoot}`);
         console.log(`  output     : ${outDir}`);
 
+        // Skip bundles that have a components directory but no JS/TS component
+        // files — e.g. the core Storefront bundle whose components/ tree currently
+        // contains only Twig templates and documentation.
+        const files = await glob('**/*.{js,ts}', {
+            cwd: componentRoot,
+            ignore: ['**/*.test.{js,ts}', '**/*.stories.*'],
+        });
+
+        if (files.length === 0) {
+            console.log('  No JS/TS components found. Skipping.');
+            return;
+        }
+
         // npm install if the bundle has its own package.json.
         if (fs.existsSync(path.join(storefrontAppDir, 'package.json'))) {
             console.log(`  npm install in ${storefrontAppDir}`);
@@ -214,11 +226,6 @@ function componentMapPlugin() {
         // parallel builds.
         const isExtension = bundleName !== 'Storefront';
         const namespace = bundleName;
-
-        const files = await glob('**/*.{js,ts}', {
-            cwd: componentRoot,
-            ignore: ['**/*.test.{js,ts}', '**/*.stories.*'],
-        });
 
         // For extensions the entry name carries the namespace prefix so the
         // dist-es/components/ tree can be copied flat without path rewriting.

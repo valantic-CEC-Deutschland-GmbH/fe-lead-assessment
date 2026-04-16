@@ -1,32 +1,19 @@
 import path from 'node:path';
 import { defineConfig, type UserConfig } from 'vite';
-import { glob } from 'tinyglobby';
-import { componentMapPlugin } from './build/component-map-plugin';
-import { devImportMapPlugin } from './build/dev-import-map-plugin';
-import { extensionModuleResolverPlugin } from './build/extension-module-resolver-plugin';
-import { scopedSubpathExportsPlugin } from './build/scoped-subpath-exports-plugin';
-
-export const componentRoot = path.resolve(import.meta.dirname, '../../views/components');
+import { buildComponentEntries } from './build/vite/component-entries';
+import { componentMapPlugin } from './build/vite/component-map-plugin';
+import { devImportMapPlugin } from './build/vite/dev-import-map-plugin';
+import { devServerNoticePlugin } from './build/vite/dev-server-notice-plugin';
+import { extensionModuleResolverPlugin } from './build/vite/extension-module-resolver-plugin';
+import { scopedSubpathExportsPlugin } from './build/vite/scoped-subpath-exports-plugin';
+import { themeScssWatcherPlugin } from './build/vite/theme-scss-watcher-plugin';
 
 // Allow the dev server to serve files from the Resources/ tree and the
 // project root (needed for /@fs/ URLs to extension component sources).
 const resourcesRoot = path.resolve(import.meta.dirname, '../..'); // Resources/
-const projectRoot = path.resolve(import.meta.dirname, '../../../../../'); // repo root
-
-export async function buildComponentEntries(): Promise<Record<string, string>> {
-    const files = await glob('**/*.{js,ts}', {
-        cwd: componentRoot,
-        ignore: ['**/*.test.{js,ts}', '**/*.stories.*'],
-    });
-
-    return Object.fromEntries(
-        files.map(file => [
-            // Key mirrors the source path without extension, preserving directory structure.
-            file.replace(/\.(js|ts)$/, ''),
-            path.join(componentRoot, file),
-        ]),
-    );
-}
+const projectRoot = process.env.PROJECT_ROOT
+    ? path.resolve(process.env.PROJECT_ROOT)
+    : path.resolve(import.meta.dirname, '../../../../../');
 
 export default defineConfig(async ({ command }): Promise<UserConfig> => {
     const entries = await buildComponentEntries();
@@ -57,20 +44,29 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
         plugins: [
             componentMapPlugin(),
             devImportMapPlugin(projectRoot),
+            devServerNoticePlugin(),
             extensionModuleResolverPlugin(projectRoot),
             scopedSubpathExportsPlugin(path.resolve(import.meta.dirname, 'node_modules')),
+            themeScssWatcherPlugin(projectRoot),
         ],
         resolve: {
-            alias: isServe ? {
+            alias: {
+                // Mirror webpack's resolve.alias so that main.js and plugin entries
+                // that use bare 'src/…', 'scss/…', 'assets/…', 'vendor/…' imports
+                // resolve correctly when served by the Vite dev server.
+                src:    path.resolve(import.meta.dirname, 'src'),
+                assets: path.resolve(import.meta.dirname, 'assets'),
+                scss:   path.resolve(import.meta.dirname, 'src/scss'),
+                vendor: path.resolve(import.meta.dirname, 'vendor'),
                 // In dev server mode resolve 'shopware' to the actual source file
                 // so Vite can transform /@fs/ component files that import from it.
                 // In production builds 'shopware' stays external (resolved via
                 // the runtime import map).
-                shopware: path.resolve(import.meta.dirname, 'src/shopware.ts'),
-            } : {},
+                ...(isServe ? { shopware: path.resolve(import.meta.dirname, 'src/shopware.ts') } : {}),
+            },
         },
         server: {
-            port: Number(process.env.STOREFRONT_COMPONENTS_VITE_PORT ?? 5175),
+            port: Number(process.env.STOREFRONT_VITE_PORT ?? 5175),
             cors: true,
             fs: {
                 // Allow Vite to serve component sources from any bundle under

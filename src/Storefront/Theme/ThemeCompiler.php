@@ -291,15 +291,13 @@ class ThemeCompiler implements ThemeCompilerInterface
         $copyFiles = [];
 
         // The shopware runtime module is always emitted by the core Vite build.
-        if ($this->hasViteBuild($this->storefrontJsDir)) {
-            $shopwareSrc = $this->storefrontJsDir . '/dist-es/shopware/shopware.js';
-            if ($this->localFilesystem->exists($shopwareSrc)) {
-                $copyFiles[] = new CopyBatchInput(
-                    $shopwareSrc,
-                    [$themeJsPath . 'shopware/shopware.js'],
-                    $this->visibility
-                );
-            }
+        $shopwareSrc = $this->storefrontJsDir . '/dist-es/shopware/shopware.js';
+        if ($this->localFilesystem->exists($shopwareSrc)) {
+            $copyFiles[] = new CopyBatchInput(
+                $shopwareSrc,
+                [$themeJsPath . 'shopware/shopware.js'],
+                $this->visibility
+            );
         }
 
         foreach ($this->groupComponentsByStorefrontDir() as $storefrontDir => $components) {

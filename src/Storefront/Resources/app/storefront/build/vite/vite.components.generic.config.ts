@@ -115,7 +115,7 @@ export default defineConfig(async (): Promise<UserConfig> => {
                 // Extension's own node_modules first, then the core Storefront's shared
                 // node_modules as fallback for packages the extension doesn't vendor itself.
                 path.join(storefrontAppDir, 'node_modules'),
-                path.resolve(import.meta.dirname, '..', 'node_modules'),
+                path.resolve(import.meta.dirname, '../..', 'node_modules'),
             ),
             extensionNodeModulesPlugin(),
             componentMapPlugin(),

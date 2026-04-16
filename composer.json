@@ -300,7 +300,7 @@
         "storefront:unit:watch": "Launches the interactive jest unit test-suite watcher for the Storefront",
         "storefront:components:unit": "Launches the Vitest unit test-suite for Storefront components",
         "storefront:components:unit:watch": "Launches the interactive Vitest unit test-suite watcher for Storefront components",
-        "storefront:components:dev-server": "Starts the Vite dev server for Storefront components (port 5175 by default, override with STOREFRONT_COMPONENTS_VITE_PORT)",
+        "storefront:dev-server": "Starts the Vite dev server for the Storefront (port 5175 by default, override with STOREFRONT_VITE_PORT)",
         "storefront:storybook": "Runs the Storybook development server for the Storefront component library",
         "stylelint": "Codestyle checks all SCSS files of Administration and Storefront",
         "stylelint:admin": "Code Style checks for all Admin SCSS files",
@@ -313,7 +313,7 @@
         "translation:lint": "Validates existence of snippets in all core-supported languages",
         "translation:update": "Updates all installed translations from the translations GitHub repository",
         "watch:admin": "Enables hot module reloading for the Admin",
-        "watch:storefront": "Enables hot module reloading for the Storefront"
+        "watch:storefront": "Enables hot module reloading for the Storefront. Deprecated! Use 'storefront:dev-server' instead."
     },
     "scripts": {
         "admin:code-mods": "@npm:admin run code-mods --",
@@ -493,9 +493,12 @@
             "Composer\\Config::disableProcessTimeout",
             "@npm:storefront run unit:components:watch"
         ],
-        "storefront:components:dev-server": [
+        "storefront:dev-server": [
             "Composer\\Config::disableProcessTimeout",
-            "@npm:storefront run dev:components"
+            "@php bin/console bundle:dump",
+            "@php bin/console feature:dump",
+            "@php bin/console theme:dump",
+            "@npm:storefront run dev:server"
         ],
         "storefront:storybook": [
             "Composer\\Config::disableProcessTimeout",
@@ -522,6 +525,7 @@
             "@npm:admin run dev"
         ],
         "watch:storefront": [
+            "echo \"\\e[31mDeprecated! Use 'storefront:dev-server' instead\n\\e[0m\"",
             "Composer\\Config::disableProcessTimeout",
             "@php bin/console bundle:dump",
             "@php bin/console feature:dump",

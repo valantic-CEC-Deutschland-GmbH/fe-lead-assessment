@@ -1,16 +1,16 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { mergeConfig, defineConfig } from 'vitest/config';
-import { buildComponentEntries } from './vite.components.config';
-import { componentMapPlugin } from './build/component-map-plugin';
-import { extensionModuleResolverPlugin } from './build/extension-module-resolver-plugin';
+import { buildComponentEntries } from './build/vite/component-entries';
+import { componentMapPlugin } from './build/vite/component-map-plugin';
+import { extensionModuleResolverPlugin } from './build/vite/extension-module-resolver-plugin';
 
 // Allow vitest's Vite dev server to serve files from the views/ tree that lives
 // two levels above the app/storefront package root.
-const resourcesRoot = path.resolve(__dirname, '../..');
-
-// Project root is five levels up (storefront → app → Resources → Storefront → src → root).
-const projectRoot = path.resolve(__dirname, '../../../../../');
+const resourcesRoot = path.resolve(import.meta.dirname, '../..');
+const projectRoot = process.env.PROJECT_ROOT
+    ? path.resolve(process.env.PROJECT_ROOT)
+    : path.resolve(import.meta.dirname, '../../../../../');
 
 type BundleEntry = {
     basePath?: string;
@@ -20,7 +20,7 @@ const COMPONENTS_PATH = 'Resources/views/components';
 
 /**
  * Collect the views/components root for every bundle that has one in
- * var/plugins.json.  Falls back to the core Storefront path only when the
+ * var/plugins.json. Falls back to the core Storefront path only when the
  * plugins manifest is absent (e.g. during a fresh checkout before bundle:dump).
  */
 function resolveComponentRoots(): string[] {
