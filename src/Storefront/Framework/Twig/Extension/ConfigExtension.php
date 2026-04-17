@@ -27,6 +27,7 @@ class ConfigExtension extends AbstractExtension
             new TwigFunction('theme_config', $this->theme(...), ['needs_context' => true]),
             new TwigFunction('theme_scripts', $this->scripts(...), ['needs_context' => true]),
             new TwigFunction('component_import_map', $this->componentImportMap(...), ['needs_context' => true]),
+            new TwigFunction('theme_css_vars', $this->themeCssVars(...), ['needs_context' => true]),
         ];
     }
 
@@ -68,6 +69,26 @@ class ConfigExtension extends AbstractExtension
     public function componentImportMap(): array
     {
         return $this->config->componentImportMap();
+    }
+
+    /**
+     * Returns a CSS `:root { }` block containing all theme config fields that have
+     * `"scss": true` (the default) as CSS custom properties, e.g.:
+     *
+     *   :root {
+     *     --sw-color-brand-primary: #0042a0;
+     *     --sw-font-family-base: Inter, sans-serif;
+     *   }
+     *
+     * Use `{{ theme_css_vars()|raw }}` inside a `<style>` tag in your template.
+     * Components can then reference these via `var(--sw-color-brand-primary)`.
+     */
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function themeCssVars(array $context): string
+    {
+        return $this->config->themeCssVars($this->getContext($context), $this->getThemeId($context));
     }
 
     /**

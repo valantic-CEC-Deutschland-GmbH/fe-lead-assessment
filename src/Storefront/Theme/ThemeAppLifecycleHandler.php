@@ -7,6 +7,7 @@ use Shopware\Core\Framework\App\Event\AppChangedEvent;
 use Shopware\Core\Framework\App\Event\AppDeactivatedEvent;
 use Shopware\Core\Framework\App\Event\AppUpdatedEvent;
 use Shopware\Core\Framework\Log\Package;
+use Shopware\Storefront\Framework\Component\ComponentPublisher;
 use Shopware\Storefront\Theme\StorefrontPluginConfiguration\AbstractStorefrontPluginConfigurationFactory;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
@@ -22,7 +23,8 @@ class ThemeAppLifecycleHandler implements EventSubscriberInterface
     public function __construct(
         private readonly StorefrontPluginRegistry $themeRegistry,
         private readonly AbstractStorefrontPluginConfigurationFactory $themeConfigFactory,
-        private readonly ThemeLifecycleHandler $themeLifecycleHandler
+        private readonly ThemeLifecycleHandler $themeLifecycleHandler,
+        private readonly ComponentPublisher $componentPublisher,
     ) {
     }
 
@@ -56,11 +58,19 @@ class ThemeAppLifecycleHandler implements EventSubscriberInterface
             $configurationCollection,
             $event->getContext()
         );
+
+        $appPath = $app->getPath();
+        if ($appPath !== '') {
+            $this->componentPublisher->publishBundle($appPath, $app->getName());
+        }
     }
 
     public function handleUninstall(AppDeactivatedEvent $event): void
     {
-        $config = $this->themeRegistry->getConfigurations()->getByTechnicalName($event->getApp()->getName());
+        $appName = $event->getApp()->getName();
+        $config = $this->themeRegistry->getConfigurations()->getByTechnicalName($appName);
+
+        $this->componentPublisher->unpublish($appName);
 
         if (!$config) {
             return;

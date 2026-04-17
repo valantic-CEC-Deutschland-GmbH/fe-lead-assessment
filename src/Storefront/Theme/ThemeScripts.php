@@ -46,7 +46,7 @@ readonly class ThemeScripts
      * Paths inside the map are theme-relative (e.g. 'js/components/Sw/Filter/Sorting.js').
      * TemplateConfigAccessor converts them to full URLs at request time.
      *
-     * @return array{imports: array<string, string>, scopes?: array<string, array<string, string>>}|null
+     * @return array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>}|null
      */
     public function getComponentImportMap(): ?array
     {

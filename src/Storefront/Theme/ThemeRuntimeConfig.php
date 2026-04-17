@@ -20,7 +20,7 @@ use Shopware\Core\Framework\Log\Package;
  *     viewInheritance?: array<string>,
  *     scriptFiles?: array<string>|null,
  *     iconSets?: array<string, array{path: string, namespace: string}>,
- *     componentImportMap?: array{imports: array<string, string>, scopes?: array<string, array<string, string>>}|null,
+ *     componentImportMap?: array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>}|null,
  *     updatedAt?: \DateTimeInterface|null
  * }
  * @phpstan-type ThemeRuntimeConfigArrayOverrides array{
@@ -30,7 +30,7 @@ use Shopware\Core\Framework\Log\Package;
  *     viewInheritance?: array<string>,
  *     scriptFiles?: array<string>|null,
  *     iconSets?: array<string, array{path: string, namespace: string}>,
- *     componentImportMap?: array{imports: array<string, string>, scopes?: array<string, array<string, string>>}|null,
+ *     componentImportMap?: array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>}|null,
  *     updatedAt?: \DateTimeInterface|null
  * }
  */
@@ -61,7 +61,7 @@ class ThemeRuntimeConfig
          * Pre-built component import map with full URLs, computed once by
          * ThemeCompiler::buildComponentImportMap() at theme compile time.
          *
-         * @var array{imports: array<string, string>, scopes?: array<string, array<string, string>>}|null
+         * @var array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>}|null
          */
         public readonly ?array $componentImportMap = null,
     ) {

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { defineConfig, type UserConfig } from 'vite';
-import { buildComponentEntries } from './build/vite/component-entries';
+import { buildComponentEntries, buildComponentScssEntries } from './build/vite/component-entries';
 import { componentMapPlugin } from './build/vite/component-map-plugin';
 import { devImportMapPlugin } from './build/vite/dev-import-map-plugin';
 import { devServerNoticePlugin } from './build/vite/dev-server-notice-plugin';
@@ -15,10 +15,36 @@ const projectRoot = process.env.PROJECT_ROOT
     ? path.resolve(process.env.PROJECT_ROOT)
     : path.resolve(import.meta.dirname, '../../../../../');
 
+/**
+ * SCSS load paths made available to every component stylesheet.
+ *
+ * vendor/  — exposes Bootstrap SCSS so component files can write e.g.
+ *            `@use 'bootstrap/scss/variables' as *` to access $font-size-lg etc.
+ * src/scss/ — exposes Shopware skin abstracts so component files can write
+ *             `@use 'skin/shopware/abstract/variables/bootstrap' as *` etc.
+ *
+ * Theme-specific SCSS variables ($sw-color-brand-primary etc.) are intentionally
+ * NOT injected here.  Components must use CSS custom properties (var(--sw-*))
+ * for runtime-customisable values.
+ */
+const scssLoadPaths = [
+    path.resolve(import.meta.dirname, 'vendor'),
+    path.resolve(import.meta.dirname, 'src/scss'),
+];
+
 export default defineConfig(async ({ command }): Promise<UserConfig> => {
-    const entries = await buildComponentEntries();
+    const jsEntries = await buildComponentEntries();
+    const scssEntries = await buildComponentScssEntries();
+    const entries = { ...jsEntries, ...scssEntries };
     const isServe = command === 'serve';
     return {
+        css: {
+            preprocessorOptions: {
+                scss: {
+                    loadPaths: scssLoadPaths,
+                },
+            },
+        },
         build: {
             outDir: 'dist-es/components',
             emptyOutDir: true,
@@ -34,16 +60,27 @@ export default defineConfig(async ({ command }): Promise<UserConfig> => {
                 external: ['shopware'],
                 output: {
                     format: 'es',
-                    // Preserve directory structure: Sw/Product/Listing.js
-                    entryFileNames: '[name].js',
+                    // Preserve directory structure with a content hash for cache busting.
+                    entryFileNames: '[name]-[hash].js',
                     // All vendor chunks go into a flat vendor/ directory with a content hash.
                     chunkFileNames: 'vendor/[name]-[hash].js',
+                    // SCSS entry keys include the .scss extension (e.g. 'Sw/Button/Primary.scss')
+                    // to avoid collisions with same-named JS entries. Rolldown appends .css to
+                    // produce the asset name ('Sw/Button/Primary.scss.css'), so we strip the
+                    // embedded .scss before composing the final filename.
+                    assetFileNames: (info) => {
+                        const firstName = info.names[0] ?? 'asset.css';
+                        if (firstName.endsWith('.scss.css')) {
+                            return `${firstName.replace(/\.scss\.css$/, '')}-[hash][extname]`;
+                        }
+                        return '[name]-[hash][extname]';
+                    },
                 },
             },
         },
         plugins: [
             componentMapPlugin(),
-            devImportMapPlugin(projectRoot),
+            devImportMapPlugin(projectRoot, scssLoadPaths),
             devServerNoticePlugin(),
             extensionModuleResolverPlugin(projectRoot),
             scopedSubpathExportsPlugin(path.resolve(import.meta.dirname, 'node_modules')),

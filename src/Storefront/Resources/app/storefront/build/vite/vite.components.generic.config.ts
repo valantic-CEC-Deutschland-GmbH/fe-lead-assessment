@@ -12,8 +12,9 @@
  *                        Core component names already carry the Sw/ prefix by convention.
  *   Extensions:          entry files are prefixed with the namespace so the dist-es/components/
  *                        tree can be copied flat into the theme without any path rewriting.
- *                        E.g. Wusel/Counter.js → ComponentTestApp/Wusel/Counter.js
- *                        Vendor chunks:         ComponentTestApp/vendor/debounce-abc123.js
+ *                        E.g. Wusel/Counter.js  → ComponentTestApp/Wusel/Counter.js
+ *                             Wusel/Counter.scss → ComponentTestApp/Wusel/Counter.css
+ *                        Vendor chunks:          ComponentTestApp/vendor/debounce-abc123.js
  *
  * Module resolution note:
  *   Component sources live in Resources/views/components/ while npm deps are installed into
@@ -44,6 +45,25 @@ const isExtension = namespace !== 'Storefront';
 const storefrontAppDir = path.resolve(outDir, '../..');
 const resolveFromExtension = createRequire(path.join(storefrontAppDir, 'package.json'));
 
+// Core Storefront's app/storefront directory (sibling of this config file's build/ folder).
+const coreStorefrontAppDir = path.resolve(import.meta.dirname, '../..');
+
+/**
+ * SCSS load paths for component stylesheets.
+ *
+ * Extensions get their own vendor/ first (if it exists), then fall back to
+ * the core Storefront's vendor/ for Bootstrap and common packages.
+ * The core Storefront's src/scss/ is always available for skin abstracts.
+ *
+ * Theme-specific SCSS variables ($sw-*) are intentionally not injected —
+ * components must use CSS custom properties (var(--sw-*)) for runtime values.
+ */
+const scssLoadPaths = [
+    path.join(storefrontAppDir, 'vendor'),
+    path.join(coreStorefrontAppDir, 'vendor'),
+    path.join(coreStorefrontAppDir, 'src/scss'),
+];
+
 /**
  * Resolves bare specifiers from the extension's own node_modules directory.
  *
@@ -72,23 +92,48 @@ function extensionNodeModulesPlugin() {
 }
 
 export default defineConfig(async (): Promise<UserConfig> => {
-    const files = await glob('**/*.{js,ts}', {
+    const jsFiles = await glob('**/*.{js,ts}', {
         cwd: componentRoot,
         ignore: ['**/*.test.{js,ts}', '**/*.stories.*'],
     });
+    const scssFiles = await glob('**/*.scss', {
+        cwd: componentRoot,
+        ignore: ['**/*.stories.*'],
+    });
 
-    // For extensions the entry name becomes {Namespace}/{componentName}
-    // (e.g. ComponentTestApp/Wusel/Counter) so that entryFileNames '[name].js'
-    // produces the namespace-prefixed output path without further rewriting.
-    const entries = Object.fromEntries(
-        files.map(file => {
-            const name = file.replace(/\.(js|ts)$/, '');
-            const entryName = isExtension ? `${namespace}/${name}` : name;
-            return [entryName, path.join(componentRoot, file)];
-        }),
-    );
+    // For extensions the entry name carries the namespace prefix so the
+    // dist-es/components/ tree can be copied flat without path rewriting.
+    // JS:   Wusel/Counter.js   → ComponentTestApp/Wusel/Counter      (key, no ext)
+    // SCSS: Wusel/Dusel.scss   → ComponentTestApp/Wusel/Dusel.scss   (key keeps .scss)
+    //
+    // The .scss extension is kept in SCSS keys so that a component with both a
+    // .js and a .scss file of the same base name (e.g. Dusel.js + Dusel.scss)
+    // does not produce duplicate keys. The assetFileNames function below strips
+    // the embedded .scss from the CSS output filename.
+    const makeJsEntryName = (file: string): string => {
+        const name = file.replace(/\.(js|ts)$/, '');
+        return isExtension ? `${namespace}/${name}` : name;
+    };
+    const makeScssEntryName = (file: string): string =>
+        isExtension ? `${namespace}/${file}` : file;
+
+    const entries: Record<string, string> = {
+        ...Object.fromEntries(
+            jsFiles.map(file => [makeJsEntryName(file), path.join(componentRoot, file)]),
+        ),
+        ...Object.fromEntries(
+            scssFiles.map(file => [makeScssEntryName(file), path.join(componentRoot, file)]),
+        ),
+    };
 
     return {
+        css: {
+            preprocessorOptions: {
+                scss: {
+                    loadPaths: scssLoadPaths,
+                },
+            },
+        },
         build: {
             outDir,
             emptyOutDir: true,
@@ -100,10 +145,21 @@ export default defineConfig(async (): Promise<UserConfig> => {
                 external: ['shopware'],
                 output: {
                     format: 'es',
-                    entryFileNames: '[name].js',
+                    // Preserve directory structure with a content hash for cache busting.
+                    entryFileNames: '[name]-[hash].js',
                     chunkFileNames: isExtension
                         ? `${namespace}/vendor/[name]-[hash].js`
                         : 'vendor/[name]-[hash].js',
+                    // SCSS entry keys keep the .scss extension to avoid key collisions.
+                    // Rolldown appends .css → 'Ns/Wusel/Dusel.scss.css'; strip .scss before
+                    // composing the output path so the file stays 'Ns/Wusel/Dusel-[hash].css'.
+                    assetFileNames: (info) => {
+                        const firstName = info.names[0] ?? 'asset.css';
+                        if (firstName.endsWith('.scss.css')) {
+                            return `${firstName.replace(/\.scss\.css$/, '')}-[hash][extname]`;
+                        }
+                        return '[name]-[hash][extname]';
+                    },
                 },
             },
         },

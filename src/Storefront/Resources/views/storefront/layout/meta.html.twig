@@ -130,22 +130,34 @@
             </title>
         {% endblock %}
 
+        {% block layout_head_theme_css_vars %}
+            {%- set themeCssVars = theme_css_vars() -%}
+            {%- if themeCssVars is not empty -%}
+                <style>{{ themeCssVars|raw }}</style>
+            {%- endif -%}
+        {% endblock %}
+
         {% block layout_head_stylesheet %}
             {% if isHMRMode and not feature('v6.8.0.0') %}
                 {# @deprecated tag:v6.8.0 - Will be removed. Use the Vite dev server instead. #}
                 {# CSS will be loaded from the JS automatically #}
             {% else %}
-                {% set devStyles = importmapData.styles ?? [] %}
-                {% if devStyles is not empty %}
-                    {# Vite dev server running: CSS compiled on-the-fly #}
-                    {% for url in devStyles %}
+                {% set componentStyles = importmapData.styles ?? [] %}
+                {% set isDevServer = importmapData.isDevServer ?? false %}
+                {% if isDevServer %}
+                    {# Vite dev server: component SCSS is compiled on-the-fly, replaces the theme stylesheet #}
+                    {% for url in componentStyles %}
                         <link rel="stylesheet" href="{{ url }}">
                     {% endfor %}
                 {% else %}
+                    {# Production: compiled theme stylesheet first, then individual component CSS files #}
                     {% set assets = theme_config('assets.css') %}
                     {% for file in assets %}
                         <link rel="stylesheet"
                           href="{{ asset(file, 'theme') }}">
+                    {% endfor %}
+                    {% for url in componentStyles %}
+                        <link rel="stylesheet" href="{{ url }}">
                     {% endfor %}
                 {% endif %}
             {% endif %}

@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import type { Plugin, ViteDevServer } from 'vite';
 import { glob } from 'tinyglobby';
+import { compileAsync } from 'sass-embedded';
 
 type BundleEntry = {
     basePath?: string;
@@ -12,6 +13,9 @@ type BundleEntry = {
 };
 
 const COMPONENTS_PATH = 'Resources/views/components';
+
+/** URL prefix for the on-the-fly component SCSS middleware. */
+const COMP_CSS_PREFIX = '/__sw-comp-css/';
 
 /**
  * Converts a component file path (relative to its component root) to the
@@ -55,7 +59,12 @@ function fileToTag(relPath: string, namespace: string | undefined): string {
  * When the dev server stops the file is removed and the Storefront
  * transparently falls back to the production import map and compiled CSS.
  */
-export function devImportMapPlugin(projectRoot: string): Plugin {
+/**
+ * @param projectRoot  Absolute path to the Shopware project root.
+ * @param scssLoadPaths  Additional SCSS load paths forwarded to the on-the-fly
+ *                       component SCSS compiler (vendor/, src/scss/, …).
+ */
+export function devImportMapPlugin(projectRoot: string, scssLoadPaths: string[] = []): Plugin {
     const flagFile = path.join(projectRoot, 'var/cache/storefront_components.dev.json');
     let viteRoot = '';
 
@@ -76,7 +85,59 @@ export function devImportMapPlugin(projectRoot: string): Plugin {
             viteRoot = config.root;
         },
 
-        async configureServer(server: ViteDevServer) {
+        configureServer(server: ViteDevServer) {
+            // Build namespace → bundle-basePath index so the SCSS middleware can
+            // resolve a URL like "/__sw-comp-css/ComponentTestApp/Wusel/Dusel.scss"
+            // back to the absolute SCSS file path on disk.
+            const pluginsJsonPath = path.join(projectRoot, 'var/plugins.json');
+            const bundles: Record<string, BundleEntry> = fs.existsSync(pluginsJsonPath)
+                ? (JSON.parse(fs.readFileSync(pluginsJsonPath, 'utf-8')) as Record<string, BundleEntry>)
+                : {};
+
+            // namespace ('' for core) → absolute components-root directory
+            const nsToCompRoot: Record<string, string> = {};
+            for (const [bundleName, bundle] of Object.entries(bundles)) {
+                const ns = bundleName === 'Storefront' ? '' : bundleName;
+                nsToCompRoot[ns] = path.join(projectRoot, bundle.basePath ?? '', COMPONENTS_PATH);
+            }
+
+            // Middleware: serve individual component SCSS files as compiled CSS so
+            // PHP can use them as <link rel="stylesheet"> targets in dev mode —
+            // matching the per-file CSS behaviour of the production Vite build.
+            server.middlewares.use(COMP_CSS_PREFIX, (req, res, next) => {
+                const relUrl = req.url?.replace(/^\//, '') ?? '';
+
+                // Determine namespace and file path from the URL.
+                // URLs look like "ComponentTestApp/Wusel/Dusel.scss" (namespaced)
+                // or "Sw/Header/Navbar.scss" (core, no namespace).
+                let scssAbsPath: string | undefined;
+                for (const ns of Object.keys(nsToCompRoot)) {
+                    const compRoot = nsToCompRoot[ns];
+                    if (compRoot === undefined) continue;
+
+                    const prefix = ns ? `${ns}/` : '';
+                    if (!relUrl.startsWith(prefix)) continue;
+
+                    const candidate = path.join(compRoot, relUrl.slice(prefix.length));
+                    if (fs.existsSync(candidate)) {
+                        scssAbsPath = candidate;
+                        break;
+                    }
+                }
+
+                if (!scssAbsPath) {
+                    next();
+                    return;
+                }
+
+                compileAsync(scssAbsPath, { loadPaths: scssLoadPaths, quietDeps: true })
+                    .then(result => {
+                        res.setHeader('Content-Type', 'text/css');
+                        res.end(result.css);
+                    })
+                    .catch(() => next());
+            });
+
             const write = async (): Promise<void> => {
                 const port = server.config.server.port ?? 5175;
                 const origin = `http://localhost:${port}`;
@@ -88,12 +149,6 @@ export function devImportMapPlugin(projectRoot: string): Plugin {
                 if (fs.existsSync(shopwareSrc)) {
                     imports['shopware'] = `${origin}/src/shopware.ts`;
                 }
-
-                // All component files from every registered bundle.
-                const pluginsJsonPath = path.join(projectRoot, 'var/plugins.json');
-                const bundles = fs.existsSync(pluginsJsonPath)
-                    ? (JSON.parse(fs.readFileSync(pluginsJsonPath, 'utf-8')) as Record<string, BundleEntry>)
-                    : {};
 
                 for (const [bundleName, bundle] of Object.entries(bundles)) {
                     // The core Storefront bundle uses bare component names
@@ -119,14 +174,31 @@ export function devImportMapPlugin(projectRoot: string): Plugin {
                     }
                 }
 
-                // Single CSS URL from the sw-theme-scss plugin middleware.
-                // All SCSS entries are compiled together as one virtual document,
-                // so a single URL is sufficient. Included here so PHP only needs
-                // to check one flag file.
+                // CSS URLs for dev mode:
+                // 1. Main theme SCSS (sw-theme-scss middleware) — when theme-files.json exists.
+                // 2. Individual component SCSS files — served on-the-fly by the
+                //    /__sw-comp-css/ middleware above, mirroring the per-file CSS
+                //    behaviour of the production Vite build.
                 const themeFilesPath = path.join(projectRoot, 'var/theme-files.json');
-                const styles = fs.existsSync(themeFilesPath)
+                const styles: string[] = fs.existsSync(themeFilesPath)
                     ? [`${origin}/theme-scss/all.css`]
                     : [];
+
+                for (const [bundleName, bundle] of Object.entries(bundles)) {
+                    const namespace = bundleName === 'Storefront' ? '' : bundleName;
+                    const compRoot = path.join(projectRoot, bundle.basePath ?? '', COMPONENTS_PATH);
+                    if (!fs.existsSync(compRoot)) continue;
+
+                    const scssFiles = await glob('**/*.scss', {
+                        cwd: compRoot,
+                        ignore: ['**/*.stories.*'],
+                    });
+
+                    for (const file of scssFiles) {
+                        const namespacedPath = namespace ? `${namespace}/${file}` : file;
+                        styles.push(`${origin}${COMP_CSS_PREFIX}${namespacedPath}`);
+                    }
+                }
 
                 // JS bundle entry URLs — replaces the Webpack hot proxy in dev.
                 // Core storefront main.js lives inside the Vite root so it gets a

@@ -60,19 +60,20 @@ class TemplateConfigAccessor
 
     /**
      * Returns the full import map data: top-level imports, optional scoped imports for extensions,
-     * and optional ordered lists of Vite dev-server CSS and JS URLs.
+     * and optional ordered lists of CSS and JS URLs.
      *
      * When the Vite component dev server is running it writes a flag file that
      * IS the complete map (all entries already contain full dev-server URLs).
-     * That map is returned verbatim, including the `styles` and `scripts` keys
-     * written by the dev plugins so that the template can inject <link> and
-     * <script> tags without separate function calls.
+     * That map is returned with `isDevServer: true` added so that the template
+     * can treat dev-server component CSS as a replacement for the compiled theme
+     * stylesheet (the dev server re-compiles component SCSS on the fly).
      *
      * In production the stored map already contains full URLs pre-computed at theme
-     * compile time by ThemeCompiler::buildComponentImportMap(). `scopes`, `styles`,
-     * and `scripts` are omitted when not applicable.
+     * compile time by ThemeCompiler::buildComponentImportMap(). The `styles` key,
+     * if present, lists the component CSS files at public/components/ that must be
+     * loaded alongside the regular compiled theme stylesheet.
      *
-     * @return array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>, scripts?: list<string>}
+     * @return array{imports: array<string, string>, scopes?: array<string, array<string, string>>, styles?: list<string>, scripts?: list<string>, isDevServer?: bool}
      */
     public function componentImportMap(): array
     {
@@ -81,11 +82,36 @@ class TemplateConfigAccessor
         if ($this->kernelEnvironment === 'dev') {
             $devMap = $this->themeScripts->getDevImportMap();
             if ($devMap !== null) {
-                return $devMap;
+                return $devMap + ['isDevServer' => true];
             }
         }
 
         return $this->themeScripts->getComponentImportMap() ?? ['imports' => []];
+    }
+
+    /**
+     * Renders all theme config fields that have `"scss": true` (the default) as a CSS
+     * `:root { }` block so Vite-compiled component stylesheets can reference them via
+     * `var(--sw-color-brand-primary)` without depending on the PHP SCSS compiler.
+     *
+     * Delegates to ThemeConfigValueAccessor::getCssVarValues() so values are resolved
+     * the same way as theme_config() — media URLs substituted, cached per sales channel.
+     */
+    public function themeCssVars(SalesChannelContext $context, ?string $themeId): string
+    {
+        $vars = $this->themeConfigAccessor->getCssVarValues($context, $themeId);
+
+        if ($vars === []) {
+            return '';
+        }
+
+        $lines = array_map(
+            static fn (string $key, string|int $value): string => \sprintf('  --%s: %s;', $key, $value),
+            array_keys($vars),
+            $vars,
+        );
+
+        return ':root {' . \PHP_EOL . implode(\PHP_EOL, $lines) . \PHP_EOL . '}';
     }
 
     /**

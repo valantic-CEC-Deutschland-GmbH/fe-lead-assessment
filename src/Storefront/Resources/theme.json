@@ -19,7 +19,6 @@
         }
       }
     },
-    "@Components",
     "@Plugins"
   ],
   "script": [

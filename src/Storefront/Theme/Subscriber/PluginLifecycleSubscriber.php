@@ -14,6 +14,7 @@ use Shopware\Core\Framework\Plugin\Event\PluginPreDeactivateEvent;
 use Shopware\Core\Framework\Plugin\Event\PluginPreUninstallEvent;
 use Shopware\Core\Framework\Plugin\Event\PluginPreUpdateEvent;
 use Shopware\Core\Framework\Plugin\PluginLifecycleService;
+use Shopware\Storefront\Framework\Component\ComponentPublisher;
 use Shopware\Storefront\Theme\Exception\InvalidThemeBundleException;
 use Shopware\Storefront\Theme\Exception\ThemeCompileException;
 use Shopware\Storefront\Theme\StorefrontPluginConfiguration\AbstractStorefrontPluginConfigurationFactory;
@@ -37,7 +38,8 @@ class PluginLifecycleSubscriber implements EventSubscriberInterface
         private readonly string $projectDirectory,
         private readonly AbstractStorefrontPluginConfigurationFactory $pluginConfigurationFactory,
         private readonly ThemeLifecycleHandler $themeLifecycleHandler,
-        private readonly ThemeLifecycleService $themeLifecycleService
+        private readonly ThemeLifecycleService $themeLifecycleService,
+        private readonly ComponentPublisher $componentPublisher,
     ) {
     }
 
@@ -85,6 +87,11 @@ class PluginLifecycleSubscriber implements EventSubscriberInterface
             $this->storefrontPluginRegistry->getConfigurations(),
             $event->getContext()->getContext()
         );
+
+        $pluginPath = $event->getPlugin()->getPath() ?? '';
+        if ($pluginPath !== '') {
+            $this->componentPublisher->publishBundle($pluginPath, $pluginName);
+        }
     }
 
     public function pluginPostDeactivate(PluginPostDeactivateEvent $event): void
@@ -118,6 +125,8 @@ class PluginLifecycleSubscriber implements EventSubscriberInterface
         if (!$config) {
             return;
         }
+
+        $this->componentPublisher->unpublish($pluginName);
 
         if ($config->hasAdditionalBundles()) {
             $this->themeLifecycleHandler->deactivateTheme($config, $event->getContext()->getContext());
@@ -181,6 +190,11 @@ class PluginLifecycleSubscriber implements EventSubscriberInterface
             $configurationCollection,
             $event->getContext()->getContext()
         );
+
+        $pluginPath = $event->getPlugin()->getPath() ?? '';
+        if ($pluginPath !== '') {
+            $this->componentPublisher->publishBundle($pluginPath, $event->getPlugin()->getName());
+        }
     }
 
     private function skipCompile(Context $context): bool
