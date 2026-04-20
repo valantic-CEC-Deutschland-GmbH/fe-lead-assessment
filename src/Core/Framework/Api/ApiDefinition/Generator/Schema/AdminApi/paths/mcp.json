@@ -9,7 +9,7 @@
                     "Experimental"
                 ],
                 "summary": "MCP JSON-RPC endpoint",
-                "description": "Handles Model Context Protocol (MCP) requests using the Streamable HTTP transport. Accepts JSON-RPC 2.0 messages for methods such as `initialize`, `tools\/list`, `tools\/call`, `prompts\/list`, `prompts\/get`, `resources\/list`, and `resources\/read`. Requires either an integration access key pair (`sw-access-key` + `sw-secret-access-key` headers) or a standard OAuth2 bearer token.",
+                "description": "Handles Model Context Protocol (MCP) requests using the Streamable HTTP transport. Accepts JSON-RPC 2.0 messages for methods such as `initialize`, `tools\/list`, `tools\/call`, `prompts\/list`, `prompts\/get`, `resources\/list`, and `resources\/read`. Requires either an integration access key pair (`sw-access-key` + `sw-secret-access-key` headers) or a standard OAuth2 bearer token. Experimental API, not part of our backwards compatibility promise, thus this API can introduce breaking changes at any time.",
                 "operationId": "mcpPost",
                 "parameters": [
                     {
