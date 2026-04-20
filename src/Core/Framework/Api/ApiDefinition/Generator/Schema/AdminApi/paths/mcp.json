@@ -128,7 +128,7 @@
                     "Experimental"
                 ],
                 "summary": "MCP SSE stream",
-                "description": "Opens a Server-Sent Events stream for receiving server-initiated messages. Used by MCP clients that support the SSE transport variant.",
+                "description": "Opens a Server-Sent Events stream for receiving server-initiated messages. Used by MCP clients that support the SSE transport variant. Experimental API, not part of our backwards compatibility promise, thus this API can introduce breaking changes at any time.",
                 "operationId": "mcpGet",
                 "parameters": [
                     {
@@ -162,7 +162,7 @@
                     "Experimental"
                 ],
                 "summary": "Close MCP session",
-                "description": "Terminates an active MCP session identified by the `mcp-session-id` header.",
+                "description": "Terminates an active MCP session identified by the `mcp-session-id` header. Experimental API, not part of our backwards compatibility promise, thus this API can introduce breaking changes at any time.",
                 "operationId": "mcpDelete",
                 "parameters": [
                     {
@@ -189,7 +189,7 @@
                     "Experimental"
                 ],
                 "summary": "MCP CORS preflight",
-                "description": "Handles CORS preflight requests for the MCP endpoint.",
+                "description": "Handles CORS preflight requests for the MCP endpoint. Experimental API, not part of our backwards compatibility promise, thus this API can introduce breaking changes at any time.",
                 "operationId": "mcpOptions",
                 "responses": {
                     "204": {
