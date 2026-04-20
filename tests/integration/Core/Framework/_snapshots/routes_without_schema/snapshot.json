@@ -102,7 +102,7 @@
     "GET /_info/ping",
     "GET /_info/rule-config",
     "GET /_info/stoplightio.html",
-"* /_proxy-order/{salesChannelId}",
+    "* /_proxy-order/{salesChannelId}",
     "PATCH /_proxy/disable-automatic-promotions",
     "PATCH /_proxy/enable-automatic-promotions",
     "PATCH /_proxy/modify-shipping-costs",

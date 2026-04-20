@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mcp xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="">
     <mcp-tools>
-        <mcp-tool>
-            <name>sync-orders</name>
-            <url>https://app.example.com/mcp/sync</url>
+        <mcp-tool name="sync-orders" url="https://app.example.com/mcp/sync">
             <label>Sync Orders</label>
             <label lang="de-DE">Bestellungen synchronisieren</label>
             <description>Synchronize orders from external ERP</description>
@@ -13,24 +11,18 @@
                 <property name="limit" type="integer" description="Max number of orders"/>
             </input-schema>
         </mcp-tool>
-        <mcp-tool>
-            <name>stock-check</name>
-            <url>https://app.example.com/mcp/stock</url>
+        <mcp-tool name="stock-check" url="https://app.example.com/mcp/stock">
             <label>Stock Check</label>
         </mcp-tool>
     </mcp-tools>
     <mcp-prompts>
-        <mcp-prompt>
-            <name>order-context</name>
-            <url>https://app.example.com/mcp/prompt/order-context</url>
+        <mcp-prompt name="order-context" url="https://app.example.com/mcp/prompt/order-context">
             <label>Order Context</label>
             <label lang="de-DE">Bestellungskontext</label>
             <description>Context for order management</description>
             <description lang="de-DE">Kontext für die Bestellungsverwaltung</description>
         </mcp-prompt>
-        <mcp-prompt>
-            <name>product-context</name>
-            <url>https://app.example.com/mcp/prompt/product-context</url>
+        <mcp-prompt name="product-context" url="https://app.example.com/mcp/prompt/product-context">
             <label>Product Context</label>
         </mcp-prompt>
     </mcp-prompts>

@@ -11,7 +11,7 @@
                     </xs:complexType>
                     <xs:unique name="uniqueToolName">
                         <xs:selector xpath="mcp-tool"/>
-                        <xs:field xpath="name"/>
+                        <xs:field xpath="@name"/>
                     </xs:unique>
                 </xs:element>
                 <xs:element name="mcp-prompts" minOccurs="0">
@@ -22,7 +22,7 @@
                     </xs:complexType>
                     <xs:unique name="uniquePromptName">
                         <xs:selector xpath="mcp-prompt"/>
-                        <xs:field xpath="name"/>
+                        <xs:field xpath="@name"/>
                     </xs:unique>
                 </xs:element>
                 <xs:element name="mcp-resources" minOccurs="0">
@@ -50,8 +50,6 @@
 
     <xs:complexType name="mcpTool">
         <xs:sequence>
-            <xs:element name="name" type="xs:string"/>
-            <xs:element name="url" type="xs:string"/>
             <xs:element name="label" type="translatable" maxOccurs="unbounded"/>
             <xs:element name="description" type="translatable" minOccurs="0" maxOccurs="unbounded"/>
             <xs:element name="input-schema" minOccurs="0">
@@ -62,6 +60,28 @@
                 </xs:complexType>
             </xs:element>
         </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="url" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="mcpPrompt">
+        <xs:sequence>
+            <xs:element name="label" type="translatable" maxOccurs="unbounded"/>
+            <xs:element name="description" type="translatable" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="url" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="mcpResource">
+        <xs:sequence>
+            <xs:element name="label" type="translatable" maxOccurs="unbounded"/>
+            <xs:element name="description" type="translatable" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="uri" type="xs:string" use="required"/>
+        <xs:attribute name="url" type="xs:string" use="required"/>
+        <xs:attribute name="mime-type" type="xs:string" use="optional"/>
     </xs:complexType>
 
     <xs:complexType name="inputProperty">
@@ -80,25 +100,5 @@
         </xs:attribute>
         <xs:attribute name="description" type="xs:string" use="optional"/>
         <xs:attribute name="required" type="xs:boolean" use="optional"/>
-    </xs:complexType>
-
-    <xs:complexType name="mcpPrompt">
-        <xs:sequence>
-            <xs:element name="name" type="xs:string"/>
-            <xs:element name="url" type="xs:string"/>
-            <xs:element name="label" type="translatable" maxOccurs="unbounded"/>
-            <xs:element name="description" type="translatable" minOccurs="0" maxOccurs="unbounded"/>
-        </xs:sequence>
-    </xs:complexType>
-
-    <xs:complexType name="mcpResource">
-        <xs:sequence>
-            <xs:element name="label" type="translatable" maxOccurs="unbounded"/>
-            <xs:element name="description" type="translatable" minOccurs="0" maxOccurs="unbounded"/>
-        </xs:sequence>
-        <xs:attribute name="name" type="xs:string" use="required"/>
-        <xs:attribute name="uri" type="xs:string" use="required"/>
-        <xs:attribute name="url" type="xs:string" use="required"/>
-        <xs:attribute name="mime-type" type="xs:string" use="optional"/>
     </xs:complexType>
 </xs:schema>
