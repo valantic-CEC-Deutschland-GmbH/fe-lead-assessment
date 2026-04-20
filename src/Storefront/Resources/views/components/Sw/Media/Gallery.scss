@@ -11,29 +11,14 @@
 
 .sw-media-gallery--thumbnail-nav-bottom {
     grid-template-columns: 100%;
-    grid-template-rows: max-content 1fr;
+    grid-template-rows: 1fr auto;
 
     .sw-media-gallery__thumbnail-nav {
         order: 2;
     }
-}
 
-.sw-media-gallery--is-lightbox {
-    grid-template-rows: calc(100vh - 2rem);
-
-    .sw-media-gallery__previews {
-        height: 100%;
-    }
-
-    .sw-media-gallery__preview-item {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-
-    .sw-media-gallery__preview {
-        max-height: 100%;
+    .sw-media-gallery__previews-wrapper {
+        min-height: 0;
     }
 }
 
