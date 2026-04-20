@@ -1,0 +1,289 @@
+<?php declare(strict_types=1);
+
+namespace Shopware\Tests\Unit\Core\Framework\DependencyInjection\CompilerPass;
+
+use Mcp\Capability\Attribute\McpTool;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\TestCase;
+use Shopware\Core\Framework\DependencyInjection\CompilerPass\McpToolCompilerPass;
+use Shopware\Core\Framework\DependencyInjection\DependencyInjectionException;
+use Shopware\Core\Framework\Log\Package;
+use Shopware\Core\Framework\Mcp\Tool\McpToolResponse;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Reference;
+
+/**
+ * @internal
+ */
+#[Package('framework')]
+#[CoversClass(McpToolCompilerPass::class)]
+class McpToolCompilerPassTest extends TestCase
+{
+    public function testPluginTagsAreRemappedToMcpTags(): void
+    {
+        $container = $this->createContainer();
+
+        $def = new Definition(McpToolCompilerPassTestNamespacedTool::class);
+        $def->addTag('shopware.mcp.tool');
+        $container->setDefinition(McpToolCompilerPassTestNamespacedTool::class, $def);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->getDefinition(McpToolCompilerPassTestNamespacedTool::class)->hasTag('mcp.tool'));
+    }
+
+    public function testDuplicateToolNamesThrow(): void
+    {
+        $container = $this->createContainer();
+
+        $def1 = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $def1->addTag('mcp.tool');
+        $container->setDefinition('tool.first', $def1);
+
+        $def2 = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $def2->addTag('mcp.tool');
+        $container->setDefinition('tool.second', $def2);
+
+        $this->expectException(DependencyInjectionException::class);
+        $this->expectExceptionMessageMatches('/duplicate/i');
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+    }
+
+    public function testPluginToolWithNamespacePasses(): void
+    {
+        $container = $this->createContainer();
+
+        $def = new Definition(McpToolCompilerPassTestNamespacedTool::class);
+        $def->addTag('shopware.mcp.tool');
+        $container->setDefinition(McpToolCompilerPassTestNamespacedTool::class, $def);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition(McpToolCompilerPassTestNamespacedTool::class));
+    }
+
+    public function testAllowlistRemovesNonAllowedTools(): void
+    {
+        $container = $this->createContainer();
+        $container->setParameter('shopware.mcp.allowed_tools', ['shopware-core-tool']);
+
+        $allowed = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $allowed->addTag('mcp.tool');
+        $container->setDefinition('tool.allowed', $allowed);
+
+        $blocked = new Definition(McpToolCompilerPassTestNamespacedTool::class);
+        $blocked->addTag('mcp.tool');
+        $container->setDefinition('tool.blocked', $blocked);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition('tool.allowed'));
+        static::assertFalse($container->hasDefinition('tool.blocked'));
+    }
+
+    public function testEmptyAllowlistKeepsAllTools(): void
+    {
+        $container = $this->createContainer();
+        $container->setParameter('shopware.mcp.allowed_tools', []);
+
+        $def = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $def->addTag('mcp.tool');
+        $container->setDefinition('tool.core', $def);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition('tool.core'));
+    }
+
+    public function testToolWithoutMcpAttributeIsSkippedInConflictDetection(): void
+    {
+        $container = $this->createContainer();
+
+        $def1 = new Definition(McpToolCompilerPassTestNoAttribute::class);
+        $def1->addTag('mcp.tool');
+        $container->setDefinition('tool.no-attr', $def1);
+
+        $def2 = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $def2->addTag('mcp.tool');
+        $container->setDefinition('tool.core', $def2);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition('tool.no-attr'));
+        static::assertTrue($container->hasDefinition('tool.core'));
+    }
+
+    public function testAllowlistRemovesToolWithoutMcpAttribute(): void
+    {
+        $container = $this->createContainer();
+        $container->setParameter('shopware.mcp.allowed_tools', ['shopware-core-tool']);
+
+        $def = new Definition(McpToolCompilerPassTestNoAttribute::class);
+        $def->addTag('mcp.tool');
+        $container->setDefinition('tool.no-attr', $def);
+
+        $allowed = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $allowed->addTag('mcp.tool');
+        $container->setDefinition('tool.allowed', $allowed);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertFalse($container->hasDefinition('tool.no-attr'));
+        static::assertTrue($container->hasDefinition('tool.allowed'));
+    }
+
+    public function testDiscoveryCacheIsWiredWhenServiceExists(): void
+    {
+        $container = $this->createContainer();
+
+        $container->register('shopware.mcp.discovery_cache');
+
+        $builderDef = $container->getDefinition('mcp.server.builder');
+        $builderDef->addMethodCall('setDiscovery', [
+            new Reference('mcp.discovery.reflection'),
+            [],
+            [],
+        ]);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        $calls = $builderDef->getMethodCalls();
+        $setDiscoveryCalls = array_filter($calls, fn ($c) => $c[0] === 'setDiscovery');
+
+        static::assertNotEmpty($setDiscoveryCalls);
+
+        $lastCall = end($setDiscoveryCalls);
+        static::assertInstanceOf(Reference::class, $lastCall[1][3]);
+        static::assertSame('shopware.mcp.discovery_cache', (string) $lastCall[1][3]);
+    }
+
+    public function testDiscoveryCacheSkipsNonSetDiscoveryMethodCalls(): void
+    {
+        $container = $this->createContainer();
+
+        $container->register('shopware.mcp.discovery_cache');
+
+        $builderDef = $container->getDefinition('mcp.server.builder');
+        $builderDef->addMethodCall('setSomethingElse', ['arg1']);
+        $builderDef->addMethodCall('setDiscovery', [
+            new Reference('mcp.discovery.reflection'),
+            [],
+            [],
+        ]);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        $calls = $builderDef->getMethodCalls();
+        $setDiscoveryCalls = array_filter($calls, fn ($c) => $c[0] === 'setDiscovery');
+
+        static::assertNotEmpty($setDiscoveryCalls);
+
+        $lastCall = end($setDiscoveryCalls);
+        static::assertInstanceOf(Reference::class, $lastCall[1][3]);
+        static::assertSame('shopware.mcp.discovery_cache', (string) $lastCall[1][3]);
+    }
+
+    public function testDiscoveryCacheSkippedWhenNoCacheService(): void
+    {
+        $container = $this->createContainer();
+
+        $builderDef = $container->getDefinition('mcp.server.builder');
+        $builderDef->addMethodCall('setDiscovery', [
+            new Reference('mcp.discovery.reflection'),
+            [],
+            [],
+        ]);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        $calls = $builderDef->getMethodCalls();
+        $setDiscoveryCalls = array_filter($calls, fn ($c) => $c[0] === 'setDiscovery');
+
+        foreach ($setDiscoveryCalls as $call) {
+            static::assertArrayNotHasKey(3, $call[1]);
+        }
+    }
+
+    public function testNonExistentClassIsSkippedInConflictDetection(): void
+    {
+        $container = $this->createContainer();
+
+        $def = new Definition('App\\NonExistent\\ToolClass');
+        $def->addTag('mcp.tool');
+        $container->setDefinition('tool.ghost', $def);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition('tool.ghost'));
+    }
+
+    public function testSkipsWhenNoMcpServerBuilder(): void
+    {
+        $container = new ContainerBuilder();
+
+        $def = new Definition(McpToolCompilerPassTestCoreTool::class);
+        $def->addTag('mcp.tool');
+        $container->setDefinition('tool.core', $def);
+
+        $pass = new McpToolCompilerPass();
+        $pass->process($container);
+
+        static::assertTrue($container->hasDefinition('tool.core'));
+    }
+
+    private function createContainer(): ContainerBuilder
+    {
+        $container = new ContainerBuilder();
+        $container->register('mcp.server.builder');
+
+        return $container;
+    }
+}
+
+/**
+ * @internal
+ */
+#[McpTool(name: 'shopware-core-tool', description: 'test core tool')]
+class McpToolCompilerPassTestCoreTool extends McpToolResponse
+{
+    public function __invoke(): string
+    {
+        return '';
+    }
+}
+
+/**
+ * @internal
+ */
+#[McpTool(name: 'my-plugin-namespaced-tool', description: 'test namespaced tool')]
+class McpToolCompilerPassTestNamespacedTool extends McpToolResponse
+{
+    public function __invoke(): string
+    {
+        return '';
+    }
+}
+
+/**
+ * @internal
+ */
+class McpToolCompilerPassTestNoAttribute
+{
+    public function __invoke(): string
+    {
+        return '';
+    }
+}

@@ -1,0 +1,259 @@
+# MCP Usage Examples
+
+## Exploring the data model
+
+**Discover available entities:**
+Use the `entity-list` resource (`shopware://entities`) or `shopware-entity-schema` tool.
+
+**Understand an entity's fields:**
+```
+Tool: shopware-entity-schema
+Input: {"entity": "product"}
+```
+
+## Searching for products
+
+**Simple term search (using flattened params):**
+```
+Tool: shopware-entity-search
+Input: {"entity": "product", "term": "shirt", "limit": 5}
+```
+
+**Search with criteria JSON:**
+```
+Tool: shopware-entity-search
+Input: {
+    "entity": "product",
+    "criteria": "{\"filter\": [{\"type\": \"contains\", \"field\": \"name\", \"value\": \"shirt\"}], \"limit\": 10}"
+}
+```
+
+**Find active products with stock > 10, sorted by name:**
+```
+Tool: shopware-entity-search
+Input: {
+    "entity": "product",
+    "criteria": "{\"filter\": [{\"type\": \"multi\", \"operator\": \"AND\", \"queries\": [{\"type\": \"equals\", \"field\": \"active\", \"value\": true}, {\"type\": \"range\", \"field\": \"stock\", \"parameters\": {\"gte\": 10}}]}], \"sort\": [{\"field\": \"name\", \"order\": \"ASC\"}]}"
+}
+```
+
+**Paginate through results:**
+```
+Tool: shopware-entity-search
+Input: {"entity": "product", "limit": 10, "page": 3}
+```
+
+**Override default response fields with explicit includes:**
+
+By default, responses only contain scalar fields and explicitly requested associations. Use `includes` in the criteria to select exactly which fields you want per entity type:
+```
+Tool: shopware-entity-search
+Input: {
+    "entity": "product",
+    "criteria": "{\"includes\": {\"product\": [\"id\", \"name\", \"productNumber\", \"stock\"], \"product_manufacturer\": [\"id\", \"name\"]}, \"associations\": {\"manufacturer\": {}}}"
+}
+```
+
+## Storefront product search
+
+**Search products with resolved prices in a sales channel context:**
+```
+Tool: shopware-storefront-search
+Input: {
+    "salesChannelId": "<sales-channel-uuid>",
+    "criteria": "{\"filter\": [{\"type\": \"contains\", \"field\": \"name\", \"value\": \"shirt\"}], \"limit\": 5}"
+}
+```
+
+**Find red shoes in size 42 using human-readable property filters:**
+```
+Tool: shopware-storefront-search
+Input: {
+    "salesChannelId": "<sales-channel-uuid>",
+    "properties": "{\"Color\": \"Red\", \"Size\": \"42\"}",
+    "term": "shoes"
+}
+```
+The `properties` parameter resolves group/option names to UUIDs automatically and builds the correct filter (OR within group, AND across groups).
+
+## Working with orders
+
+**Quick order lookup by order number:**
+```
+Tool: shopware-order-summary
+Input: {"orderNumber": "10001"}
+```
+Returns order with customer info, line items, payment status, and delivery status in a single call.
+
+**Quick order lookup by UUID:**
+```
+Tool: shopware-order-summary
+Input: {"orderId": "<uuid>"}
+```
+
+**Recent orders with line items (generic search):**
+```
+Tool: shopware-entity-search
+Input: {
+    "entity": "order",
+    "criteria": "{\"sort\": [{\"field\": \"createdAt\", \"order\": \"DESC\"}], \"limit\": 5, \"associations\": {\"lineItems\": {}, \"transactions\": {}}}"
+}
+```
+
+**Transition order state (preview first):**
+```
+Tool: shopware-order-state
+Input: {"orderNumber": "10001", "orderAction": "process", "dryRun": true}
+```
+
+**Ship a delivery:**
+```
+Tool: shopware-order-state
+Input: {"orderNumber": "10001", "deliveryAction": "ship", "dryRun": false}
+```
+
+## Customer lookup
+
+**Find customer by email with order history:**
+```
+Tool: shopware-customer-lookup
+Input: {"email": "john@example.com"}
+```
+
+**Find customer by customer number:**
+```
+Tool: shopware-customer-lookup
+Input: {"customerNumber": "SW10001"}
+```
+
+## Creating products (simplified)
+
+**Preview a new product (dryRun):**
+```
+Tool: shopware-product-create
+Input: {"name": "Blue T-Shirt", "productNumber": "SW-BLUE-001", "grossPrice": 29.99, "stock": 100}
+```
+
+**Create with custom tax rate and categories:**
+```
+Tool: shopware-product-create
+Input: {"name": "Organic Tea", "productNumber": "SW-TEA-001", "grossPrice": 12.99, "taxRate": 7, "categories": "Food, Beverages", "dryRun": false}
+```
+
+## Revenue reporting
+
+**Monthly revenue report:**
+```
+Tool: shopware-revenue-report
+Input: {"from": "2025-03-01", "to": "2025-03-31"}
+```
+
+**Weekly revenue report for a specific sales channel:**
+```
+Tool: shopware-revenue-report
+Input: {"from": "2025-01-01", "to": "2025-03-31", "groupBy": "week", "salesChannelId": "<uuid>"}
+```
+
+## Cancelling an order
+
+**Preview cancellation (dryRun):**
+```
+Tool: shopware-order-state
+Input: {"orderNumber": "10001", "orderAction": "cancel", "transactionAction": "cancel", "deliveryAction": "cancel", "dryRun": true}
+```
+Returns a preview of which transitions will execute for the order, its transactions, and deliveries.
+
+**Cancel order, refund paid transactions:**
+```
+Tool: shopware-order-state
+Input: {"orderNumber": "10001", "orderAction": "cancel", "transactionAction": "refund", "deliveryAction": "cancel", "dryRun": false}
+```
+
+## Bestseller reporting
+
+**Top 10 bestsellers this month:**
+```
+Tool: shopware-bestseller-report
+Input: {"from": "2025-03-01", "to": "2025-03-31"}
+```
+
+**Top 5 bestsellers for a specific sales channel:**
+```
+Tool: shopware-bestseller-report
+Input: {"from": "2025-01-01", "to": "2025-03-31", "limit": 5, "salesChannelId": "<uuid>"}
+```
+
+## System configuration
+
+**Read all listing settings:**
+```
+Tool: shopware-system-config-read
+Input: {"key": "core.listing"}
+```
+
+**Update a config value (preview):**
+```
+Tool: shopware-system-config-write
+Input: {"key": "core.listing.defaultSorting", "value": "\"price-asc\"", "dryRun": true}
+```
+
+## Creating entities
+
+**Create a product (preview):**
+```
+Tool: shopware-entity-upsert
+Input: {
+    "entity": "product",
+    "payload": "{\"name\": \"New Product\", \"productNumber\": \"SW-NEW-001\", \"stock\": 100, \"taxId\": \"<tax-uuid>\", \"price\": [{\"currencyId\": \"<currency-uuid>\", \"gross\": 29.99, \"net\": 25.20, \"linked\": true}]}",
+    "dryRun": true
+}
+```
+
+## Storefront checkout flow
+
+**Step 1: Create a cart:**
+```
+Tool: shopware-cart-manage
+Input: {"salesChannelId": "<uuid>", "action": "create"}
+-> Returns {"token": "abc123", ...}
+```
+
+**Step 2: Add products to the cart:**
+```
+Tool: shopware-cart-manage
+Input: {"salesChannelId": "<uuid>", "action": "add", "token": "abc123", "productId": "<product-uuid>", "quantity": 2}
+-> Returns cart with line items and totals
+```
+
+**Step 3: Check available payment and shipping methods:**
+```
+Tool: shopware-checkout-methods
+Input: {"salesChannelId": "<uuid>", "type": "all"}
+-> Returns available payment and shipping methods with IDs
+```
+
+**Step 4: Preview the order (dryRun):**
+```
+Tool: shopware-cart-checkout
+Input: {"salesChannelId": "<uuid>", "token": "abc123", "customerId": "<customer-uuid>", "paymentMethodId": "<payment-uuid>", "dryRun": true}
+-> Returns order preview with totals
+```
+
+**Step 5: Place the order:**
+```
+Tool: shopware-cart-checkout
+Input: {"salesChannelId": "<uuid>", "token": "abc123", "customerId": "<customer-uuid>", "paymentMethodId": "<payment-uuid>", "dryRun": false}
+-> Returns {"orderId": "<uuid>"}
+```
+
+## Using resources
+
+**List available events and flow actions:**
+Read the `shopware://business-events` and `shopware://flow-actions` resources.
+
+**Find sales channel IDs:**
+Read the `shopware://sales-channels` resource.
+
+**Check valid state transitions:**
+Read the `shopware://state-machines` resource to see all states and transitions for order, delivery, and transaction state machines.
+

@@ -1,0 +1,80 @@
+<?php declare(strict_types=1);
+
+namespace Shopware\Core\Framework\Mcp\Tool;
+
+use Mcp\Capability\Attribute\McpTool;
+use Shopware\Core\Framework\Api\Serializer\JsonEntityEncoder;
+use Shopware\Core\Framework\DataAbstractionLayer\DefinitionInstanceRegistry;
+use Shopware\Core\Framework\DataAbstractionLayer\Search\Criteria;
+use Shopware\Core\Framework\DataAbstractionLayer\Search\RequestCriteriaBuilder;
+use Shopware\Core\Framework\Log\Package;
+use Shopware\Core\Framework\Mcp\Context\McpContextProvider;
+
+/**
+ * @experimental stableVersion:v6.8.0 feature:MCP_SERVER
+ */
+#[McpTool(name: 'shopware-entity-search', description: 'Search Shopware entities and return matching records. Use shopware-entity-aggregate for counts, averages, and other aggregations. Accepts full Admin API criteria JSON for filters, sorting, associations, and includes. Returns {success, data: [...], _meta: {total, page, limit}}. Use shopware-entity-schema first if you need field names.')]
+#[Package('framework')]
+class EntitySearchTool extends McpToolResponse
+{
+    use McpEntityIncludes;
+
+    /**
+     * @internal
+     */
+    public function __construct(
+        private readonly DefinitionInstanceRegistry $registry,
+        private readonly RequestCriteriaBuilder $criteriaBuilder,
+        private readonly McpContextProvider $contextProvider,
+        private readonly JsonEntityEncoder $encoder,
+    ) {
+    }
+
+    public function __invoke(string $entity, string $criteria = '{}', int $limit = 25, int $page = 1, string $term = ''): string
+    {
+        $context = $this->contextProvider->getContext();
+
+        if (!$this->registry->has($entity)) {
+            return $this->error(\sprintf('Entity "%s" not found. Use the shopware://entities resource for available entity names.', $entity));
+        }
+
+        if ($error = $this->requirePrivilege($context, $entity . ':read')) {
+            return $error;
+        }
+
+        $definition = $this->registry->getByEntityName($entity);
+        $repository = $this->registry->getRepository($entity);
+
+        $payload = json_decode($criteria, true, 512, \JSON_THROW_ON_ERROR);
+
+        $payload['limit'] ??= $limit;
+        $payload['total-count-mode'] ??= Criteria::TOTAL_COUNT_MODE_EXACT;
+        if ($page > 1) {
+            $payload['page'] = $page;
+        }
+        if ($term !== '') {
+            $payload['term'] = $term;
+        }
+
+        $criteriaObj = $this->criteriaBuilder->fromArray(
+            $payload,
+            new Criteria(),
+            $definition,
+            $context,
+        );
+
+        $this->applyDefaultIncludes($definition, $criteriaObj);
+
+        $result = $repository->search($criteriaObj, $context);
+
+        $limit = $criteriaObj->getLimit() ?? 25;
+
+        $encoded = $this->encoder->encode($criteriaObj, $definition, $result->getEntities(), '/api');
+
+        return $this->success($encoded, [
+            'total' => $result->getTotal(),
+            'page' => $criteriaObj->getOffset() ? (int) ($criteriaObj->getOffset() / $limit) + 1 : 1,
+            'limit' => $limit,
+        ]);
+    }
+}

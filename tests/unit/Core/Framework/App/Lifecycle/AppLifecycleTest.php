@@ -4,6 +4,7 @@ namespace Shopware\Tests\Unit\Core\Framework\App\Lifecycle;
 
 use Doctrine\DBAL\Connection;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\TestDox;
 use PHPUnit\Framework\TestCase;
 use Shopware\Administration\Snippet\AppAdministrationSnippetPersister;
 use Shopware\Administration\Snippet\AppLifecycleSubscriber;
@@ -19,8 +20,12 @@ use Shopware\Core\Framework\App\Lifecycle\AppLifecycle;
 use Shopware\Core\Framework\App\Lifecycle\Parameters\AppInstallParameters;
 use Shopware\Core\Framework\App\Lifecycle\Parameters\AppUpdateParameters;
 use Shopware\Core\Framework\App\Lifecycle\PermissionLifecycleService;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpPromptPersister;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpResourcePersister;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpToolPersister;
 use Shopware\Core\Framework\App\Lifecycle\Registration\AppRegistrationService;
 use Shopware\Core\Framework\App\Manifest\Manifest;
+use Shopware\Core\Framework\App\Mcp\Mcp;
 use Shopware\Core\Framework\App\Validation\AppRequirementsValidator;
 use Shopware\Core\Framework\App\Validation\ConfigValidator;
 use Shopware\Core\Framework\App\Validation\Requirements\UnmetRequirement;
@@ -309,6 +314,65 @@ class AppLifecycleTest extends TestCase
         static::assertSame('test', $appRepository->upserts[0][0]['name']);
     }
 
+    #[TestDox('passes parsed Mcp instance to persisters when mcp.xml exists')]
+    public function testInstallCallsMcpPersistersWithParsedMcp(): void
+    {
+        /** @var StaticEntityRepository<LanguageCollection> $languageRepository */
+        $languageRepository = new StaticEntityRepository([$this->getLanguageCollection()]);
+
+        $appEntities = [
+            [],
+            [
+                [
+                    'id' => Uuid::randomHex(),
+                    'path' => '',
+                    'configurable' => false,
+                    'allowDisable' => true,
+                ],
+            ],
+            [
+                [
+                    'id' => Uuid::randomHex(),
+                    'name' => 'test',
+                    'path' => '',
+                    'configurable' => false,
+                    'allowDisable' => true,
+                ],
+            ],
+        ];
+
+        $manifest = Manifest::createFromXmlFile(__DIR__ . '/../_fixtures/manifest.xml');
+        $sourceResolver = $this->getSourceResolver(__DIR__ . '/../_fixtures/manifest.xml');
+        $appRepository = $this->getAppRepositoryMock($appEntities);
+
+        $mcpToolPersister = $this->createMock(McpToolPersister::class);
+        $mcpToolPersister->expects($this->once())
+            ->method('updateTools')
+            ->with(static::callback(static fn (?Mcp $mcp): bool => $mcp instanceof Mcp));
+
+        $mcpPromptPersister = $this->createMock(McpPromptPersister::class);
+        $mcpPromptPersister->expects($this->once())
+            ->method('updatePrompts')
+            ->with(static::callback(static fn (?Mcp $mcp): bool => $mcp instanceof Mcp));
+
+        $mcpResourcePersister = $this->createMock(McpResourcePersister::class);
+        $mcpResourcePersister->expects($this->once())
+            ->method('updateResources')
+            ->with(static::callback(static fn (?Mcp $mcp): bool => $mcp instanceof Mcp));
+
+        $this->registerSubscriber($sourceResolver, $appEntities[2]);
+
+        $appLifecycle = $this->getAppLifecycle(
+            $appRepository,
+            $languageRepository,
+            $sourceResolver,
+            mcpToolPersister: $mcpToolPersister,
+            mcpPromptPersister: $mcpPromptPersister,
+            mcpResourcePersister: $mcpResourcePersister,
+        );
+        $appLifecycle->install($manifest, new AppInstallParameters(activate: false), Context::createDefaultContext());
+    }
+
     public function testInstallThrowsWhenRequirementsNotMet(): void
     {
         $manifest = Manifest::createFromXmlFile(__DIR__ . '/../_fixtures/manifest.xml');
@@ -423,7 +487,10 @@ class AppLifecycleTest extends TestCase
         EntityRepository $languageRepository,
         StaticSourceResolver $appSourceResolver,
         ?DeletedAppsGateway $deletedAppsGateway = null,
-        ?AppRequirementsValidator $requirementsValidator = null
+        ?AppRequirementsValidator $requirementsValidator = null,
+        ?McpToolPersister $mcpToolPersister = null,
+        ?McpPromptPersister $mcpPromptPersister = null,
+        ?McpResourcePersister $mcpResourcePersister = null,
     ): AppLifecycle {
         /** @var StaticEntityRepository<AclRoleCollection> $aclRoleRepo */
         $aclRoleRepo = new StaticEntityRepository([new AclRoleCollection()]);
@@ -455,6 +522,9 @@ class AppLifecycleTest extends TestCase
             $this->createMock(EntityRepository::class),
             $appSourceResolver,
             $this->createMock(ConfigReader::class),
+            $mcpToolPersister ?? $this->createMock(McpToolPersister::class),
+            $mcpPromptPersister ?? $this->createMock(McpPromptPersister::class),
+            $mcpResourcePersister ?? $this->createMock(McpResourcePersister::class),
             $deletedAppsGateway,
             $requirementsValidator ?? static::createStub(AppRequirementsValidator::class)
         );

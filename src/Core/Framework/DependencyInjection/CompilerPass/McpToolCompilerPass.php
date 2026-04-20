@@ -1,0 +1,141 @@
+<?php declare(strict_types=1);
+
+namespace Shopware\Core\Framework\DependencyInjection\CompilerPass;
+
+use Mcp\Capability\Attribute\McpTool;
+use Shopware\Core\Framework\DependencyInjection\DependencyInjectionException;
+use Shopware\Core\Framework\Log\Package;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Reference;
+
+/**
+ * @experimental stableVersion:v6.8.0 feature:MCP_SERVER
+ *
+ * Collects services tagged with "shopware.mcp.tool" from plugins
+ * and re-tags them with "mcp.tool" so the MCP SDK discovers them.
+ * Also detects duplicate tool name conflicts across all registered tools.
+ */
+#[Package('framework')]
+class McpToolCompilerPass implements CompilerPassInterface
+{
+    public function process(ContainerBuilder $container): void
+    {
+        if (!$container->hasDefinition('mcp.server.builder')) {
+            return;
+        }
+
+        $tagMapping = [
+            'shopware.mcp.tool' => 'mcp.tool',
+            'shopware.mcp.prompt' => 'mcp.prompt',
+            'shopware.mcp.resource' => 'mcp.resource',
+        ];
+
+        foreach ($tagMapping as $shopwareTag => $mcpTag) {
+            foreach ($container->findTaggedServiceIds($shopwareTag) as $serviceId => $tags) {
+                $definition = $container->getDefinition($serviceId);
+
+                if (!$definition->hasTag($mcpTag)) {
+                    $definition->addTag($mcpTag);
+                }
+            }
+        }
+
+        $this->enforceToolAllowlist($container);
+        $this->detectToolNameConflicts($container);
+        $this->enableDiscoveryCache($container);
+    }
+
+    /**
+     * When shopware.mcp.allowed_tools is non-empty, remove any tool services
+     * whose name is not in the allowlist.
+     */
+    private function enforceToolAllowlist(ContainerBuilder $container): void
+    {
+        if (!$container->hasParameter('shopware.mcp.allowed_tools')) {
+            return;
+        }
+
+        /** @var list<string> $allowedTools */
+        $allowedTools = $container->getParameter('shopware.mcp.allowed_tools');
+
+        if ($allowedTools === []) {
+            return;
+        }
+
+        foreach ($container->findTaggedServiceIds('mcp.tool') as $serviceId => $tags) {
+            $definition = $container->getDefinition($serviceId);
+            $class = $definition->getClass() ?? $serviceId;
+            $toolName = $this->resolveToolName($class);
+
+            if ($toolName === null || !\in_array($toolName, $allowedTools, true)) {
+                $container->removeDefinition($serviceId);
+            }
+        }
+    }
+
+    private function detectToolNameConflicts(ContainerBuilder $container): void
+    {
+        /** @var array<string, string> $toolNames tool-name => service-id */
+        $toolNames = [];
+
+        foreach ($container->findTaggedServiceIds('mcp.tool') as $serviceId => $tags) {
+            $definition = $container->getDefinition($serviceId);
+            $class = $definition->getClass() ?? $serviceId;
+
+            $toolName = $this->resolveToolName($class);
+
+            if ($toolName === null) {
+                continue;
+            }
+
+            if (isset($toolNames[$toolName])) {
+                throw DependencyInjectionException::duplicateMcpToolName($toolName, $toolNames[$toolName], $serviceId);
+            }
+
+            $toolNames[$toolName] = $serviceId;
+        }
+    }
+
+    private function resolveToolName(string $class): ?string
+    {
+        if (!class_exists($class)) {
+            return null;
+        }
+
+        $ref = new \ReflectionClass($class);
+
+        foreach ($ref->getAttributes(McpTool::class) as $attr) {
+            $instance = $attr->newInstance();
+
+            return $instance->name;
+        }
+
+        return null;
+    }
+
+    /**
+     * Adds a PSR-16 cache to the MCP SDK's discovery process so file scanning
+     * and reflection are only performed once instead of on every request.
+     */
+    private function enableDiscoveryCache(ContainerBuilder $container): void
+    {
+        $builderDef = $container->getDefinition('mcp.server.builder');
+
+        if (!$container->hasDefinition('shopware.mcp.discovery_cache')) {
+            return;
+        }
+
+        foreach ($builderDef->getMethodCalls() as $index => [$method, $args]) {
+            if ($method !== 'setDiscovery') {
+                continue;
+            }
+
+            $args[3] = new Reference('shopware.mcp.discovery_cache');
+            $builderDef->removeMethodCall($method);
+            $builderDef->addMethodCall($method, $args);
+
+            break;
+        }
+    }
+}

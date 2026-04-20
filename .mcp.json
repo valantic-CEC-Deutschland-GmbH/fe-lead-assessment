@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "shopware": {
+      "type": "streamable-http",
+      "url": "http://localhost:8000/api/_mcp",
+      "headers": {
+        "sw-access-key": "SWIAAKNPA3HONFHEWUK5U3BZQQ",
+        "sw-secret-access-key": "ekd0cnVYcm9kZ2EyM2l5QU1pc0t5UldmSlhWNHJydkZ3ZjFCSjE"
+      }
+    }
+  }
+}

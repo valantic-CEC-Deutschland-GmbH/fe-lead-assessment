@@ -23,9 +23,13 @@ use Shopware\Core\Framework\App\Event\PostAppDeletedEvent;
 use Shopware\Core\Framework\App\Exception\AppRegistrationException;
 use Shopware\Core\Framework\App\Lifecycle\Parameters\AppInstallParameters;
 use Shopware\Core\Framework\App\Lifecycle\Parameters\AppUpdateParameters;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpPromptPersister;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpResourcePersister;
+use Shopware\Core\Framework\App\Lifecycle\Persister\McpToolPersister;
 use Shopware\Core\Framework\App\Lifecycle\Persister\PersisterInterface;
 use Shopware\Core\Framework\App\Lifecycle\Registration\AppRegistrationService;
 use Shopware\Core\Framework\App\Manifest\Manifest;
+use Shopware\Core\Framework\App\Mcp\Mcp;
 use Shopware\Core\Framework\App\Source\SourceResolver;
 use Shopware\Core\Framework\App\Validation\AppRequirementsValidator;
 use Shopware\Core\Framework\App\Validation\ConfigValidator;
@@ -86,6 +90,9 @@ class AppLifecycle extends AbstractAppLifecycle
         private readonly EntityRepository $customEntityRepository,
         private readonly SourceResolver $sourceResolver,
         private readonly ConfigReader $configReader,
+        private readonly McpToolPersister $mcpToolPersister,
+        private readonly McpPromptPersister $mcpPromptPersister,
+        private readonly McpResourcePersister $mcpResourcePersister,
         private readonly DeletedAppsGateway $deletedAppsGateway,
         private readonly AppRequirementsValidator $requirementsValidator,
     ) {
@@ -262,6 +269,11 @@ class AppLifecycle extends AbstractAppLifecycle
 
         $this->assetService->copyAssetsFromApp($app->getName(), $app->getPath());
 
+        $mcp = $this->getMcp($app);
+        $this->mcpToolPersister->updateTools($mcp, $id, $defaultLocale, $context);
+        $this->mcpPromptPersister->updatePrompts($mcp, $id, $defaultLocale, $context);
+        $this->mcpResourcePersister->updateResources($mcp, $id, $defaultLocale, $context);
+
         $updatePayload = [
             'id' => $app->getId(),
             'configurable' => $this->handleConfigUpdates($app, $manifest, $install),
@@ -270,6 +282,17 @@ class AppLifecycle extends AbstractAppLifecycle
         $this->updateMetadata($updatePayload, $context);
 
         return $app;
+    }
+
+    private function getMcp(AppEntity $app): ?Mcp
+    {
+        $fs = $this->sourceResolver->filesystemForApp($app);
+
+        if (!$fs->has('Resources/mcp.xml')) {
+            return null; // @codeCoverageIgnore
+        }
+
+        return Mcp::createFromXmlFile($fs->path('Resources/mcp.xml'));
     }
 
     /**
